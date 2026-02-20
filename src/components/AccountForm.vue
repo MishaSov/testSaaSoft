@@ -2,7 +2,11 @@
   <div class="accounts-container">
     <div class="header">
       <h1>Учетные записи</h1>
-      <Button label="Добавить учетную запись" icon="pi pi-plus" />
+      <Button 
+        label="Добавить учетную запись" 
+        icon="pi pi-plus" 
+        @click="addNewAccount"
+      />
     </div>
 
     <div class="hint">
@@ -20,29 +24,56 @@
       </div>
 
       <div class="table-body">
-        <div v-for="account in item" :key="account.id" class="table-row">
+        <div v-for="account in accounts" :key="account.id" class="table-row">
           <div class="col-marks">
-            <InputText v-model="account.formData.metkaRaw" placeholder="Метки через ;" :maxlength="50"
-              :class="{ 'p-invalid': account.errors.metka }" fluid />
+            <InputText
+              v-model="account.formData.metkaRaw"
+              @blur="() => validateAndSave(account)"
+              placeholder="Метки через ;"
+              :maxlength="50"
+              :class="{ 'p-invalid': account.errors.metka }"
+              fluid
+            />
             <small v-if="account.errors.metka" class="error-text">{{ account.errors.metka }}</small>
           </div>
 
           <div class="col-type">
-            <Select v-model="account.formData.type" optionLabel="label" optionValue="value" placeholder="Выберите тип"
-              :class="{ 'p-invalid': account.errors.type }" fluid />
+            <Select
+              v-model="account.formData.type"
+              @change="() => handleTypeChange(account)"
+              :options="accountTypes"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Выберите тип"
+              :class="{ 'p-invalid': account.errors.type }"
+              fluid
+            />
             <small v-if="account.errors.type" class="error-text">{{ account.errors.type }}</small>
           </div>
 
           <div class="col-login">
-            <InputText v-model="account.formData.login" placeholder="Логин" :maxlength="100"
-              :class="{ 'p-invalid': account.errors.login }" fluid />
+            <InputText
+              v-model="account.formData.login"
+              @blur="() => validateAndSave(account)"
+              placeholder="Логин"
+              :maxlength="100"
+              :class="{ 'p-invalid': account.errors.login }"
+              fluid
+            />
             <small v-if="account.errors.login" class="error-text">{{ account.errors.login }}</small>
           </div>
 
           <div class="col-password">
             <div v-if="account.formData.type === 'local'">
-              <InputText v-model="account.formData.password" placeholder="Пароль" :maxlength="100"
-                :class="{ 'p-invalid': account.errors.password }" type="password" fluid />
+              <InputText
+                v-model="account.formData.password"
+                @blur="() => validateAndSave(account)"
+                placeholder="Пароль"
+                :maxlength="100"
+                :class="{ 'p-invalid': account.errors.password }"
+                type="password"
+                fluid
+              />
               <small v-if="account.errors.password" class="error-text">{{ account.errors.password }}</small>
             </div>
             <div v-else class="password-not-required">
@@ -51,11 +82,21 @@
           </div>
 
           <div class="col-actions">
-            <Button icon="pi pi-trash" severity="danger" text rounded />
+            <Button
+              icon="pi pi-trash"
+              severity="danger"
+              text
+              rounded
+              @click="deleteAccount(account.id)"
+            />
           </div>
         </div>
 
-
+        <div v-if="accounts.length === 0" class="empty-state">
+          <i class="pi pi-database"></i>
+          <p>Нет учетных записей</p>
+          <p class="text-sm">Нажмите "Добавить учетную запись", чтобы создать первую</p>
+        </div>
       </div>
     </div>
   </div>
@@ -63,10 +104,70 @@
 
 <script setup lang="ts">
 import { storeToRefs } from 'pinia';
+import { useAccountStore } from '../stores/accountStore';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
+import type { Account, SelectOption } from '../types/account.types';
 
+const accountTypes: SelectOption[] = [
+  { label: 'Локальная', value: 'local' },
+  { label: 'LDAP', value: 'ldap' }
+];
+
+const accountStore = useAccountStore();
+const { accounts } = storeToRefs(accountStore);
+
+const addNewAccount = (): void => {
+  accountStore.addAccount();
+};
+
+const deleteAccount = (id: string): void => {
+  accountStore.deleteAccount(id);
+};
+
+const handleTypeChange = (account: Account): void => {
+  if (account.formData.type !== 'local') {
+    account.formData.password = null;
+  }
+  validateAndSave(account);
+};
+
+const validateAndSave = (account: Account): void => {
+  const errors: Record<string, string> = {};
+
+  if (!account.formData.login?.trim()) {
+    errors.login = 'Обязательное поле';
+  } else if (account.formData.login.length > 100) {
+    errors.login = 'Максимум 100 символов';
+  }
+
+  if (account.formData.type === 'local') {
+    if (!account.formData.password?.trim()) {
+      errors.password = 'Обязательное поле';
+    } else if (account.formData.password.length > 100) {
+      errors.password = 'Максимум 100 символов';
+    }
+  }
+
+  if (account.formData.metkaRaw?.length > 50) {
+    errors.metka = 'Максимум 50 символов';
+  }
+
+  account.errors = errors;
+  accountStore.updateErrors(account.id, errors);
+
+  if (Object.keys(errors).length === 0) {
+    const metkaArray = account.formData.metkaRaw
+      ? account.formData.metkaRaw
+          .split(';')
+          .map((s) => ({ text: s.trim() }))
+          .filter((item) => item.text)
+      : [];
+    accountStore.updateMetka(account.id, metkaArray);
+    account.metka = metkaArray;
+  }
+};
 </script>
 
 <style scoped>
@@ -184,4 +285,6 @@ import Select from 'primevue/select';
   font-size: 14px;
   color: #9ca3af;
 }
+
+
 </style>
